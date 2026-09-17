@@ -1,0 +1,2 @@
+# Fire_Extinguisher_Condition_Detection
+灭火器状态识别
