@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>灭火器压力表识别 · 批量</title>
+<style>
+  :root{
+    --bg:#f4f6f8; --card:#fff; --line:#e4e7ea; --line2:#cfd4d9;
+    --tx:#1f2328; --tx2:#4b5563; --tx3:#8b949e;
+    --blu:#0969da; --blu-bg:#eaf3ff; --blu-line:#b6d8ff;
+    --ok:#15803d; --ok-bg:#e7f7ec; --ok-line:#b4e0c4;
+    --bad:#b91c1c; --bad-bg:#fdeaea; --bad-line:#f3c2c2;
+    --warn:#b45309; --warn-bg:#fdf3e3; --warn-line:#f2d8a8;
+    --mute:#57606a; --mute-bg:#eef1f4; --mute-line:#d6dbe0;
+    --radius:10px; --shadow:0 1px 2px rgba(27,31,36,.06),0 3px 10px rgba(27,31,36,.05);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--tx);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",
+         "Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    background:var(--card); border-bottom:1px solid var(--line);
+    padding:14px 22px; display:flex; align-items:center; gap:14px;
+    position:sticky; top:0; z-index:20;
+  }
+  header h1{margin:0; font-size:15.5px; font-weight:600; letter-spacing:.2px}
+  header .sub{font-size:12.5px; color:var(--tx3); margin-left:2px}
+  header .spacer{flex:1}
+  .pill{
+    font-size:12px; padding:3px 10px; border-radius:999px;
+    border:1px solid var(--line2); background:var(--mute-bg); color:var(--mute);
+    white-space:nowrap;
+  }
+  .pill.on{background:var(--ok-bg); border-color:var(--ok-line); color:var(--ok)}
+  .pill.off{background:var(--bad-bg); border-color:var(--bad-line); color:var(--bad)}
+
+  main{max-width:1360px; margin:0 auto; padding:18px 22px 60px}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:16px 18px; margin-bottom:14px;
+  }
+  .card h2{
+    margin:0 0 12px; font-size:13.5px; font-weight:600; color:var(--tx2);
+    display:flex; align-items:center; gap:8px;
+  }
+  .card h2 .num{
+    width:18px; height:18px; border-radius:5px; background:var(--blu-bg);
+    color:var(--blu); font-size:11.5px; display:grid; place-items:center;
+    border:1px solid var(--blu-line); font-weight:600;
+  }
+
+  /* ---------- 投放区 ---------- */
+  #drop{
+    border:1.5px dashed var(--line2); border-radius:var(--radius);
+    background:#fbfcfd; padding:26px 18px; text-align:center; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  #drop:hover,#drop.over{border-color:var(--blu); background:var(--blu-bg)}
+  #drop .big{font-size:14.5px; font-weight:500; margin-bottom:5px}
+  #drop .sub{font-size:12.5px; color:var(--tx3); margin-bottom:14px}
+  #drop .hint{font-size:12px; color:var(--tx3); margin-top:10px}
+  .btns{display:flex; gap:9px; justify-content:center; flex-wrap:wrap}
+  button{
+    font:inherit; font-size:13px; padding:6px 15px; border-radius:7px;
+    border:1px solid var(--blu); background:var(--blu); color:#fff;
+    cursor:pointer; transition:filter .12s, background .12s;
+  }
+  button:hover{filter:brightness(1.07)}
+  button:disabled{opacity:.5; cursor:not-allowed; filter:none}
+  button.ghost{background:var(--card); color:var(--blu); border-color:var(--blu-line)}
+  button.ghost:hover{background:var(--blu-bg)}
+  button.gray{background:var(--card); color:var(--tx2); border-color:var(--line2)}
+  button.gray:hover{background:#f3f5f7}
+  button.sm{font-size:12px; padding:3px 10px; border-radius:6px}
+
+  /* 「识别参数」整块已于 2026-09-17 移除：页面上不再有可见表单控件
+     （只剩两个 hidden 的 file input，不受样式影响），
+     原先的 .opts / .opt / .ro / input[type=number|checkbox] / select / .gap
+     样式随块一起删掉了。将来若要加回控件，样式需要重新写。 */
+
+  /* ---------- 汇总 ---------- */
+  .stats{display:flex; flex-wrap:wrap; gap:10px; align-items:stretch}
+  .stat{
+    flex:1 1 120px; min-width:104px; border:1px solid var(--line);
+    border-radius:8px; padding:9px 12px; background:#fcfdfe;
+  }
+  .stat .k{font-size:11.5px; color:var(--tx3)}
+  .stat .v{font-size:20px; font-weight:600; font-variant-numeric:tabular-nums;
+           line-height:1.25}
+  .stat.ok .v{color:var(--ok)} .stat.bad .v{color:var(--bad)}
+  .stat.warn .v{color:var(--warn)} .stat.mute .v{color:var(--mute)}
+  .barwrap{height:6px; background:#eceff2; border-radius:999px; overflow:hidden;
+           margin-top:13px}
+  .barwrap > i{display:block; height:100%; width:0%; background:var(--blu);
+               transition:width .2s}
+  #progText{font-size:12px; color:var(--tx3); margin-top:7px}
+
+  /* ---------- 结果 ---------- */
+  .grid{display:grid; gap:13px; grid-template-columns:repeat(auto-fill,minmax(292px,1fr))}
+  .item{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); overflow:hidden; display:flex; flex-direction:column;
+  }
+  .item .top{
+    display:flex; align-items:center; gap:8px; padding:9px 11px;
+    border-bottom:1px solid var(--line);
+  }
+  .item .fn{
+    font-size:12.5px; font-weight:500; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; flex:1; min-width:0;
+  }
+  .item .ms{font-size:11px; color:var(--tx3); font-family:var(--mono)}
+  .thumb{position:relative; background:#2b3038; line-height:0; cursor:zoom-in;
+         height:238px; overflow:hidden}
+  .thumb img{width:100%; height:238px; object-fit:contain; display:block}
+  /* canvas 必须贴合「图片实际渲染出来的那块矩形」——object-fit:contain 会在
+     两侧/上下留黑边，若让 canvas 铺满整个容器，框和圆就会整体错位。
+     所以尺寸与偏移全部由 paint() 里的 fitCanvas() 用像素值写死。 */
+  .thumb canvas{position:absolute; pointer-events:none}
+  .thumb .spin{
+    position:absolute; top:9px; left:9px; font-size:11px; color:#fff;
+    background:rgba(0,0,0,.62); padding:2px 8px; border-radius:999px;
+  }
+  .item .body{padding:10px 12px 12px; display:flex; flex-direction:column; gap:8px}
+  .badge{
+    font-size:12px; font-weight:600; padding:2px 9px; border-radius:999px;
+    border:1px solid transparent; white-space:nowrap;
+  }
+  .b-ok{background:var(--ok-bg); color:var(--ok); border-color:var(--ok-line)}
+  .b-bad{background:var(--bad-bg); color:var(--bad); border-color:var(--bad-line)}
+  .b-warn{background:var(--warn-bg); color:var(--warn); border-color:var(--warn-line)}
+  .b-mute{background:var(--mute-bg); color:var(--mute); border-color:var(--mute-line)}
+  .b-run{background:var(--blu-bg); color:var(--blu); border-color:var(--blu-line)}
+  .kptlist{margin-top:5px}
+  .kptlist .row{display:flex; gap:6px; align-items:baseline}
+  .kptlist .idx{
+    display:inline-block; min-width:14px; text-align:center; font-weight:600;
+    color:var(--tx2);
+  }
+  .kptlist .nm{flex:1}
+  .kptlist .cf{color:var(--tx3)}
+  .kptlist .cf.low{color:var(--bad); font-weight:600}
+  .meta{
+    font-size:11px; color:var(--tx3); font-family:var(--mono);
+    border-top:1px dashed var(--line); padding-top:7px;
+    overflow-wrap:anywhere;   /* 只在整词放不下时才断，避免 white_dial 被拆成 white_dia|l */
+  }
+  .crop{border-top:1px dashed var(--line); padding-top:8px}
+  .crop .cap{font-size:11px; color:var(--tx3); margin-bottom:5px}
+  .crop img{width:100%; max-width:150px; border-radius:6px; display:block;
+            background:#000}
+  /* 指针点图是这一版的主角，给足尺寸，别缩成小图看不清点在哪 */
+  .crop.big img{max-width:100%}
+  .err{font-size:12px; color:var(--bad); background:var(--bad-bg);
+       border:1px solid var(--bad-line); border-radius:6px; padding:7px 9px}
+  .empty{color:var(--tx3); font-size:13px; text-align:center; padding:26px 0}
+
+  /* ---------- 弹窗 ---------- */
+  #modal{
+    position:fixed; inset:0; background:rgba(20,24,28,.72); z-index:60;
+    display:none; align-items:center; justify-content:center; padding:26px;
+  }
+  #modal.on{display:flex}
+  #modal .box{
+    background:var(--card); border-radius:12px; max-width:1180px; width:100%;
+    max-height:92vh; overflow:auto; padding:16px 18px;
+  }
+  #modal .hd{display:flex; align-items:center; gap:10px; margin-bottom:12px}
+  #modal .hd .fn{font-size:14px; font-weight:600; flex:1; min-width:0;
+                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  #modal .cols{display:grid; gap:16px; grid-template-columns:2fr 1fr 1fr}
+  @media (max-width:1100px){ #modal .cols{grid-template-columns:1fr 1fr} }
+  @media (max-width:820px){ #modal .cols{grid-template-columns:1fr} }
+  #modal .pane{min-width:0}
+  #modal .pane .cap{font-size:12px; color:var(--tx3); margin-bottom:6px}
+  #modal .big{position:relative; line-height:0; background:#2b3038; border-radius:8px}
+  #modal .big img{width:100%; display:block; border-radius:8px}
+  #modal .big canvas{position:absolute; inset:0; width:100%; height:100%}
+  #modal .cropImg{width:100%; border-radius:8px; background:#000}
+  #modal .kv{font-size:12px; font-family:var(--mono); color:var(--tx2);
+             margin-top:9px; line-height:1.75}
+  #toast{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%);
+    background:#1f2328; color:#fff; font-size:13px; padding:9px 16px;
+    border-radius:8px; z-index:80; opacity:0; pointer-events:none;
+    transition:opacity .18s; max-width:70vw;
+  }
+  #toast.on{opacity:.94}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>灭火器压力表识别</h1>
+  <span class="sub">YOLO 定位表盘 → 检测框裁切 → <b id="subArch">YOLO-pose</b> 定位 6 个关键点（圆心 / 4 条色区边界 / 针尖）</span>
+  <span class="spacer"></span>
+  <span id="health" class="pill off">后端未连接</span>
+</header>
+
+<main>
+  <section class="card">
+    <h2><span class="num">1</span>选择图片</h2>
+    <div id="drop">
+      <div class="big">把图片拖到这里</div>
+      <div class="sub">支持 jpg / jpeg / png / bmp / webp，可一次多张</div>
+      <div class="btns">
+        <button id="pick">选择图片</button>
+        <button id="pickDir" class="ghost">选择文件夹</button>
+      </div>
+      <div class="hint">选好后自动开始识别；也可以拖入整个文件夹</div>
+      <input id="file" type="file" accept="image/*" multiple hidden>
+      <input id="dir" type="file" webkitdirectory hidden>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2><span class="num">2</span>识别结果</h2>
+    <div class="stats">
+      <div class="stat"><div class="k">总数</div><div class="v" id="cTotal">0</div></div>
+      <div class="stat ok"><div class="k">找到针尖</div><div class="v" id="cOk">0</div></div>
+      <div class="stat bad"><div class="k">未找到针尖</div><div class="v" id="cBad">0</div></div>
+      <div class="stat mute"><div class="k">未检出表盘</div><div class="v" id="cMiss">0</div></div>
+      <div class="stat ok"><div class="k">六点齐全</div><div class="v" id="cKpt6">0</div></div>
+    </div>
+    <!-- 第二行 = 压力状态分布。判不了的单列一栏，不混进「正常」里 ——
+         「模型没给出可信的点」和「表盘确实是正常的」是两回事。 -->
+    <div class="stats" style="margin-top:10px">
+      <div class="stat bad"><div class="k">欠压</div><div class="v" id="cPUnder">0</div></div>
+      <div class="stat ok"><div class="k">正常</div><div class="v" id="cPNormal">0</div></div>
+      <div class="stat warn"><div class="k">超压</div><div class="v" id="cPOver">0</div></div>
+      <div class="stat mute"><div class="k">色带外</div><div class="v" id="cPOut">0</div></div>
+      <div class="stat mute"><div class="k">状态未判定</div><div class="v" id="cPNone">0</div></div>
+    </div>
+    <div class="barwrap"><i id="progBar"></i></div>
+    <div id="progText">等待选择图片…</div>
+    <div style="display:flex;gap:9px;margin-top:12px;flex-wrap:wrap">
+      <button id="rerun" class="gray sm" disabled>重新识别全部</button>
+      <button id="clear" class="gray sm" disabled>清空</button>
+      <button id="csv" class="ghost sm" disabled>导出 CSV</button>
+      <button id="json" class="ghost sm" disabled>导出 JSON</button>
+      <span class="spacer" style="flex:1"></span>
+      <span id="avgMs" style="font-size:12px;color:var(--tx3);align-self:center"></span>
+    </div>
+  </section>
+
+  <section id="results" class="grid"></section>
+</main>
+
+<div id="modal">
+  <div class="box">
+    <div class="hd">
+      <span class="badge b-mute" id="mBadge">—</span>
+      <span class="badge b-mute" id="mPressure">—</span>
+      <span class="fn" id="mName">—</span>
+      <button id="mClose" class="gray sm">关闭</button>
+    </div>
+    <div class="cols">
+      <div class="pane">
+        <div class="cap" id="mCap1">原图（本版不叠加任何标注）</div>
+        <div class="big"><img id="mImg" alt=""><canvas id="mCanvas"></canvas></div>
+      </div>
+      <div class="pane">
+        <div class="cap" id="mCap2">送入模型：正圆校正后</div>
+        <img id="mCrop" class="cropImg" alt="">
+        <div class="kv" id="mKv"></div>
+      </div>
+      <div class="pane">
+        <div class="cap">上图的 6 个关键点（0 圆心 · 1-4 边界 · 5 针尖）</div>
+        <img id="mTip" class="cropImg" alt="">
+        <div class="kv" id="mTipKv"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+
+/* 页面有两层结论，别混：
+     status   定位层 —— 这一步「针尖找没找到」（后端 res.status 直接给）
+     pressure 判定层 —— 压力三态「欠压/正常/超压」（后端 res.pressure 给；
+              判不了是 null，页面写「未判定」并把原因原样列出来，不替后端编结论）
+   颜色沿用表盘色区的直觉：欠压红 / 正常绿 / 超压黄。 */
+const STATUS_CLS = {"找到针尖":"b-ok", "未找到针尖":"b-bad",
+                    "未检出表盘":"b-mute"};
+const PRESSURE_CLS = {"欠压":"b-bad", "正常":"b-ok", "超压":"b-warn",
+                      "色带外":"b-mute"};
+/* 状态计数条的顺序：前三个是正经结论，「色带外」「未判定」分开数 —— 前者是
+   「指针确实指在刻度色带之外」这个真结论，后者是模型没给出可信的点。 */
+const PRESSURE_ORDER = ["欠压", "正常", "超压", "色带外"];
+const KPT_N6 = 6;         /* 6 点权重的点数，用于「六点齐全」统计与列名兜底 */
+const OK_EXT = /\.(jpe?g|png|bmp|webp)$/i;
+
+let items = [];          // {id,file,url,status,res,err}
+let seq = 0, running = false, backendOk = false;
+
+/* ---------------- 后端连通性 ---------------- */
+/* 把后端的 pose_models 描述压成一行「人话」，页面标题栏与 tooltip 都用它。
+   双模型形如:  针尖 yolov8n-pose.pt(1点 3.1M)  +  几何 yolov8m-pose.pt(5点 26.4M)
+   单模型形如:  yolov8m-pose.pt(6点)
+   架构名/参数量/点数全部由后端从 ckpt 实读，本文件不写死任何权重名。 */
+function poseModelsText(pm){
+  if (!pm || !pm.mode) return "";
+  const fmt = m => m ? `${m.arch || "?"}（${m.n_kpt || "?"}点` +
+        (m.params_m ? ` ${m.params_m}M` : "") + "）" : "—";
+  if (pm.mode === "dual")
+    return `针尖 ${fmt(pm.tip)}　+　几何 ${fmt(pm.geom)}`.replace(/　/g, "  ");
+  return fmt(pm.single);
+}
+
+/* 标题栏/chip 用的**简短**架构名。
+   双模型时「架构」不是一个名字：针尖和几何可以训练成不同架构（当前就是
+   yolov8n-pose 针尖 + yolov8m-pose 几何）。后端 pose_info.arch 是历史兼容
+   字段，双模型下只报其中一个 —— 拿它当标题栏会让人以为换的权重没生效
+   （本会话真踩过：针尖已换成 n 版，标题栏仍印 yolov8m-pose.pt）。
+   所以这里从 pose_models 各自实读的 arch 合成；两者同名就只显示一个。 */
+function archText(pi, pm){
+  const clean = s => String(s || "").replace(/\.pt$/i, "");
+  if (pm && pm.mode === "dual"){
+    const a = clean(pm.tip && pm.tip.arch), b = clean(pm.geom && pm.geom.arch);
+    if (a && b) return a === b ? a : `${a} + ${b}`;
+    return a || b || clean(pi.arch);
+  }
+  return clean(pi.arch || "");
+}
+
+async function checkHealth(){
+  try{
+    const r = await fetch("/api/health", {cache:"no-store"});
+    const j = await r.json();
+    backendOk = !!j.ok;
+    const pi = j.pose_info || {};
+    const pm = j.pose_models || {};
+    const dual = pm.mode === "dual";
+    $("#health").className = "pill on";
+    $("#health").textContent = `后端就绪 · ${dual ? "双模型" : "单模型"} · `
+      + (archText(pi, pm) || j.pose || "-");
+    $("#health").title = `第一步 ${j.yolo}\n第二步 ${dual ? "（双模型）" : ""} `
+      + poseModelsText(pm)
+      + `\npose 推理尺寸 imgsz=${pi.imgsz ?? "-"}（= 训练分辨率）`
+      + `\n合并关键点 kpt_shape=${JSON.stringify(pi.kpt_shape || [])}`
+      + `　名字 ${(pi.kpt_names || []).join(" / ")}`
+      + (dual
+         ? `\n  针尖模型 ${j.pose_tip || "-"}（1 点：指针尖端）`
+           + `\n  几何模型 ${j.pose_geom || "-"}（5 点：圆心 + 4 条色区边界）`
+         : "")
+      + `\n已完成 ${j.n_done} 张` + (j.avg_ms ? `，平均 ${j.avg_ms}ms` : "");
+    /* 椭圆 -> 正圆校正：开关控件已随「识别参数」整块移除（2026-09-17），
+       校正一律按后端默认（= 启用）。这里只把实况记进 hover 提示。 */
+    const rec = j.rectify !== false;
+    $("#health").title += `\n正圆校正 ${rec ? "启用" : "停用"}`;
+    if (pi.kpt_shape){
+      /* 架构名只留在标题栏副标题（#subArch），由后端从 ckpt 实读，前端不写死。
+         「识别参数」整块移除后，kpt_shape / 参数量 / imgsz 这些细项不再往页面
+         上写 —— 信息没丢，悬停右上角就绪徽标仍能看到完整口径（见上面的 title）。 */
+      $("#subArch").textContent = archText(pi, pm) || "YOLO-pose";
+    }
+    /* j.defaults（检测/关键点阈值、推理尺寸、裁切边长、插值、锐化、回传开关）原本
+       用来回填「识别参数」控件。该块已整块移除，识别一律走**后端默认值**
+       （见 opts()），所以这里不再需要回填任何控件。 */
+  }catch(e){
+    backendOk = false;
+    $("#health").className = "pill off";
+    $("#health").textContent = "后端未连接";
+    $("#health").title = "请先运行  python webapp_v2/server.py";
+    toast("后端未连接：请先运行  python webapp_v2/server.py");
+  }
+}
+
+/* ---------------- 选图 ---------------- */
+function addFiles(list){
+  const files = Array.from(list).filter(f => OK_EXT.test(f.name));
+  if (!files.length){ toast("没有找到支持的图片（jpg/png/bmp/webp）"); return; }
+  for (const f of files){
+    items.push({id:++seq, file:f, url:URL.createObjectURL(f),
+                status:"queued", res:null, err:null});
+  }
+  render();
+  if (!running) processQueue();
+}
+
+$("#drop").onclick = e => { if (e.target.tagName !== "BUTTON") $("#file").click(); };
+$("#pick").onclick = () => $("#file").click();
+$("#pickDir").onclick = () => $("#dir").click();
+$("#file").onchange = e => { addFiles(e.target.files); e.target.value = ""; };
+$("#dir").onchange  = e => { addFiles(e.target.files); e.target.value = ""; };
+
+["dragenter","dragover"].forEach(t => $("#drop").addEventListener(t, e => {
+  e.preventDefault(); $("#drop").classList.add("over");
+}));
+["dragleave","drop"].forEach(t => $("#drop").addEventListener(t, e => {
+  e.preventDefault(); $("#drop").classList.remove("over");
+}));
+$("#drop").addEventListener("drop", async e => {
+  const dt = e.dataTransfer;
+  // 拖进来的若是文件夹，用 webkitGetAsEntry 递归取文件
+  const out = [];
+  const entries = dt.items ? Array.from(dt.items)
+      .map(it => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean) : [];
+  if (entries.length){
+    async function walk(entry, depth){
+      if (depth > 6) return;
+      if (entry.isFile){
+        await new Promise(res => entry.file(f => { out.push(f); res(); }, res));
+      } else if (entry.isDirectory){
+        const rd = entry.createReader();
+        for (;;){
+          const batch = await new Promise(res => rd.readEntries(res, () => res([])));
+          if (!batch.length) break;
+          for (const c of batch) await walk(c, depth + 1);
+        }
+      }
+    }
+    for (const en of entries) await walk(en, 0);
+  }
+  addFiles(out.length ? out : dt.files);
+});
+
+/* ---------------- 队列执行 ---------------- */
+function opts(){
+  /* 「识别参数」整块已从页面移除，所有识别参数一律用**后端默认值** ——
+     server.py 的 argparse 默认：conf 0.10 / kpt_conf 0.20 / crop_size 960 /
+     interp auto / sharpen auto / rectify 开。页面不再传这些查询参数。
+     只显式带上页面渲染必需的两个回传开关，免得哪天后端默认值变了，
+     卡片里的裁切图/关键点图静默消失。 */
+  return { want_crop: "1", want_pose: "1" };
+}
+
+async function predictOne(it){
+  const q = new URLSearchParams(Object.assign({name: it.file.name}, opts()));
+  const r = await fetch("/api/predict?" + q.toString(), {
+    method:"POST",
+    headers:{"Content-Type": it.file.type || "application/octet-stream"},
+    body: it.file
+  });
+  const j = await r.json();
+  if (!r.ok || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+
+async function processQueue(){
+  if (running) return;
+  const todo = items.filter(i => i.status === "queued" || i.status === "error");
+  if (!todo.length){ updateStats(); return; }
+  if (!backendOk){ toast("后端未连接，无法识别"); return; }
+
+  running = true; syncButtons();
+  for (const it of todo){
+    it.status = "running"; it.err = null; render();
+    try {
+      it.res = await predictOne(it);
+      it.status = "done";
+    } catch(e){
+      it.status = "error"; it.err = String(e.message || e);
+    }
+    render();
+  }
+  running = false; syncButtons(); updateStats();
+}
+
+$("#rerun").onclick = () => {
+  items.forEach(i => { i.status = "queued"; i.res = null; i.err = null; });
+  render(); processQueue();
+};
+$("#clear").onclick = () => {
+  items.forEach(i => URL.revokeObjectURL(i.url));
+  items = []; render();
+  $("#progText").textContent = "等待选择图片…";
+};
+
+/* ---------------- 渲染 ---------------- */
+/* 卡片里的识别信息：针尖坐标 + 6 个关键点逐个列。
+   本版的主体就是这 6 个点，所以点名列全（点名全 + 置信度，低于阈值的标红）——
+   图和表对着看，才能当场判断是哪个点偏了、偏到哪，而不是拿一句状态结论糊过去。 */
+const KPT_CONF_SHOW = 0.20;      /* 与后端默认 --kpt-conf 一致，仅用于标红提示 */
+
+function fmtKpts(p){
+  const list = p.kpts || [];
+  if (!list.length) return "";
+  const rows = list.map((k, i) => {
+    const low = (k.conf != null && k.conf < KPT_CONF_SHOW) ? " low" : "";
+    const nm = k.name || ("kpt" + i);
+    const xy = (k.x == null || k.y == null)
+      ? "" : `　(${Number(k.x).toFixed(1)}, ${Number(k.y).toFixed(1)})`;
+    return `<div class="row"><span class="idx">${i}</span>`
+         + `<span class="nm">${nm}${xy}</span>`
+         + `<span class="cf${low}">conf ${k.conf == null ? "—" : Number(k.conf).toFixed(3)}</span></div>`;
+  }).join("");
+  return `<div class="kptlist">${rows}</div>`;
+}
+
+/* 双模型时把「哪个模型出了几个点」单列一行 —— 6 个点里如果有一半是占位
+   (conf=0)，光看点名列只会看到"conf 0.000"而不知道是哪个模型没出点。 */
+function splitInfo(p){
+  if (!p || p.split !== "tip+geom") return "";
+  const f = (n, lbl) => (n == null ? `${lbl} —`
+                                   : `${lbl} ${n}点` + (n ? "" : "（未出点）"));
+  const geOk = p.n_kpt_geom, tpOk = p.n_kpt_tip;
+  const bad = (n) => (n ? "" : ` class="low"`);
+  return `<div class="meta">双模型　<span${bad(geOk)}>${f(geOk, "几何")}</span>`
+       + `　+　<span${bad(tpOk)}>${f(tpOk, "针尖")}</span>　→ 合并 ${p.n_kpt ?? "—"} 点</div>`;
+}
+
+function tipInfo(res){
+  const p = res && res.pose;
+  if (!p) return "";
+  const f1 = v => (v === null || v === undefined ? "—" : Number(v).toFixed(1));
+  const pinfo = pressureInfo(p);
+  if (!p.tip){
+    return `<div class="meta">针尖　未检出
+      ${p.reason ? `（${p.reason}）` : ""}<br>
+      模型关键点数　${p.n_kpt ?? "—"}</div>` + splitInfo(p) + pinfo;
+  }
+  const s = p.tip_src;
+  return `<div class="meta">
+    针尖(裁切图)　(${f1(p.tip.x)}, ${f1(p.tip.y)})　conf ${p.tip.conf ?? "—"}<br>
+    针尖(原图)　　(${f1(s && s.x)}, ${f1(s && s.y)})<br>
+    关键点数　${p.n_kpt ?? "—"}（0 号是圆心，最后一个是针尖）</div>`
+    + splitInfo(p)
+    + pinfo
+    + fmtKpts(p);
+}
+
+/* 压力状态的详述：讲清「圆心 -> 针尖 这条射线被哪两条相邻的边界射线夹住」。
+   只报一个「正常」是没法复核的 —— 把两条夹住它的射线连同各自角度列出来，
+   配上卡片里那张画了射线的图，判得对不对一眼就能看出来。
+   margin < 3° 时额外提示「贴近分界」：这时模型抖几个像素结论就会跳档。 */
+function pressureInfo(p){
+  if (!p) return "";
+  const f1 = v => (v === null || v === undefined ? "—" : Number(v).toFixed(1));
+  if (!p.state){
+    return `<div class="meta">压力状态　<b class="low">未判定</b>`
+         + `<br>原因　${p.state_reason || "（后端未给原因）"}</div>`;
+  }
+  const sp = p.state_span, mg = p.state_margin_deg;
+  if (!sp)
+    return `<div class="meta">压力状态　<b>${p.state}</b>`
+         + `<br>针尖不在色带范围内（落在白盘面）</div>`;
+  const mgTxt = (mg === null || mg === undefined) ? ""
+    : `　离最近边界 ${f1(mg)}°`
+      + (Number(mg) < 3 ? `<b class="low">（贴近分界，结论不稳）</b>` : "");
+  return `<div class="meta">压力状态　<b>${p.state}</b>${mgTxt}<br>`
+       + `夹在　${sp.lo_name} ${f1(sp.lo_deg)}°　→　${sp.hi_name} `
+       + `${f1(sp.hi_deg)}°　（针尖 ${f1((p.boundary_angles || [])[5])}°）</div>`;
+}
+
+/* 卡片底部那三行小字。两种裁切口径都要能显示：
+   circle  —— 割圆启用时（后端 refine_circle + crop_circle）
+   crop_box —— 割圆停用期间（后端按第一步检测框直裁） */
+function metaLine(res){
+  if (!res) return "";
+  const b = res.bbox;
+  const bconf = b ? b.conf.toFixed(3) : "-";
+  if (res.circle){
+    const c = res.circle;
+    return `<div class="meta">
+    圆心 (${c.cx}, ${c.cy})　半径 ${c.r}<br>
+    方法 ${c.method}　框置信度 ${bconf}<br>
+    圆裁 ${res.crop_size.join("×")}　检测 ${res.imgsz || "-"}　耗时 ${res.elapsed_ms}ms</div>`;
+  }
+  const k = res.crop_box;
+  if (!k) return "";
+  return `<div class="meta">
+    裁切框 (${k.x1}, ${k.y1}) – (${k.x2}, ${k.y2})　${k.w}×${k.h}<br>
+    方式 ${k.mode}（割圆已停用）　框置信度 ${bconf}<br>
+    裁切 ${res.crop_size.join("×")}　检测 ${res.imgsz || "-"}　耗时 ${res.elapsed_ms}ms</div>`;
+}
+
+function render(){
+  const box = $("#results");
+  if (!items.length){
+    box.innerHTML = `<div class="empty" style="grid-column:1/-1">
+      还没有图片。把照片拖进上面的框，或点「选择图片 / 选择文件夹」。</div>`;
+    updateStats(); syncButtons(); return;
+  }
+  box.innerHTML = items.map(it => {
+    const st = it.status === "done" ? it.res.status
+             : it.status === "running" ? "识别中"
+             : it.status === "error" ? "失败" : "排队中";
+    const bcls = it.status === "running" ? "b-run"
+               : it.status === "queued" ? "b-mute"
+               : (STATUS_CLS[st] || "b-mute");
+    const spin = it.status === "running" ? `<div class="spin">识别中…</div>`
+               : it.status === "queued"  ? `<div class="spin">排队中</div>` : "";
+    const ms = it.res ? `<span class="ms">${it.res.elapsed_ms}ms</span>` : "";
+    /* 压力状态徽标：跟「找到针尖」并排。定位成了/没成 和 状态判出/判不了
+       是两件事，所以两个徽标各显示各的，不互相顶替。 */
+    const pst = (it.status === "done" && it.res)
+      ? (it.res.pressure || "未判定") : null;
+    const pbcls = PRESSURE_CLS[pst] || "b-mute";
+    const err = it.err ? `<div class="err">${it.err}</div>` : "";
+    /* 两张图的说明都要如实反映「现在模型吃的是校正后的正圆」：
+       第 1 张 = 校正结果本身（= pose 的输入），第 2 张 = 在它上面画出的 6 个点。
+       校正没生效时必须说清楚是「没开」还是「失败了降级」，否则用户会以为
+       这张椭圆图是模型看到的画面。 */
+    const rf = (it.res && it.res.rectify) || {};
+    const capR = rf.applied
+      ? `送入模型：正圆校正后`
+        + (rf.mode === "ellipse"
+            ? `（椭圆&rarr;圆 · 轴比 ${rf.ratio} · r=${rf.r}px）`
+            : `（本来就是正圆 · 仅居中）`)
+      : (rf.enabled === false
+          ? "送入模型：检测框直裁（校正已关闭）"
+          : `送入模型：检测框直裁（校正失败：${rf.reason || "未定位到表盘"}）`);
+    const crop = (it.res && it.res.crop_jpeg)
+      ? `<div class="crop"><div class="cap">${capR}</div>
+          <img src="data:image/jpeg;base64,${it.res.crop_jpeg}" alt=""></div>` : "";
+    const pose = (it.res && it.res.pose_jpeg)
+      ? `<div class="crop big"><div class="cap">上图的 6 个关键点（0 圆心 · 1-4 色区边界 · 5 针尖）</div>
+          <img src="data:image/jpeg;base64,${it.res.pose_jpeg}" alt=""></div>` : "";
+    return `<div class="item" data-id="${it.id}">
+      <div class="top">
+        <span class="badge ${bcls}">${st}</span>
+        ${pst ? `<span class="badge ${pbcls}" title="压力状态">${pst}</span>` : ""}
+        <span class="fn" title="${it.file.name}">${it.file.name}</span>${ms}
+      </div>
+      <div class="thumb">
+        <img src="${it.url}" alt="">
+        <canvas data-id="${it.id}"></canvas>${spin}
+      </div>
+      <div class="body">
+        ${err}${tipInfo(it.res)}${pose}${crop}
+      </div>
+    </div>`;
+  }).join("");
+
+  // 图片加载后把 overlay 画上
+  box.querySelectorAll(".item").forEach(el => {
+    const it = items.find(x => x.id === +el.dataset.id);
+    const img = el.querySelector(".thumb img");
+    const cv  = el.querySelector(".thumb canvas");
+    const paintIt = () => paint(cv, img, it.res);
+    if (img.complete) paintIt(); else img.onload = paintIt;
+  });
+  updateStats(); syncButtons();
+}
+
+/* 检出框（青）+ 精化圆（品红，仅割圆启用、后端回传 res.circle 时才画）
+   + 关键点（1-4 边界青、0 圆心品红、5 针尖黄十字，坐标用 res.pose.kpts_src = 原图像素）。
+   绘制坐标系用原图像素，canvas.width/height 设成原图尺寸，显示尺寸交给 CSS。
+   卡片里必须把 canvas 精确压到「图片渲染区」上（见 fitCanvas），否则错位。 */
+function fitCanvas(cv, img){
+  const host = cv.parentElement;
+  const cw = host.clientWidth, ch = host.clientHeight;
+  const w = img.naturalWidth, h = img.naturalHeight;
+  if (!w || !h || !cw || !ch) return null;
+  const s = Math.min(cw / w, ch / h);
+  const dw = w * s, dh = h * s;
+  cv.style.width  = dw + "px";
+  cv.style.height = dh + "px";
+  cv.style.left   = ((cw - dw) / 2) + "px";
+  cv.style.top    = ((ch - dh) / 2) + "px";
+  return {w, h};
+}
+
+/* 本版**不在缩略图上叠加任何东西**（2026-09-17 用户要求）：检测框、关键点十字、
+   圆心->边界/针尖的射线，全部取消。
+
+   为什么是"取消"而不是"挪位置"：缩略图贴的是**用户选的那张原图**，而第二步模型
+   的输入已经是**椭圆校正后的正圆图**了 —— 两者不是同一个坐标系。把在校正坐标系
+   里判出来的射线画回未校正的原图上，位置本身就是错的，只会误导。
+
+   要看标注，就看卡片里那张「校正后正圆 + 6 个点」（后端的 pose_jpeg，画在模型
+   真正吃进去的那张图上）。函数保留为空实现：调用点（首屏渲染 / resize / 弹窗）
+   都不用改，将来要恢复也简单。 */
+function paint(cv, img, res){
+  if (!cv) return;
+  const g = cv.getContext("2d");
+  g.clearRect(0, 0, cv.width, cv.height);
+}
+
+/* 窗口尺寸变化 → 渲染区变了，重画所有叠加层 */
+let rzT = 0;
+window.addEventListener("resize", () => {
+  clearTimeout(rzT);
+  rzT = setTimeout(() => {
+    document.querySelectorAll("#results .item").forEach(el => {
+      const it = items.find(x => x.id === +el.dataset.id);
+      if (!it) return;
+      const img = el.querySelector(".thumb img");
+      const cv  = el.querySelector(".thumb canvas");
+      if (img && cv) paint(cv, img, it.res);
+    });
+  }, 140);
+});
+
+function updateStats(){
+  const done = items.filter(i => i.status === "done");
+  const n = s => done.filter(i => i.res.status === s).length;
+  /* 六点齐全 = 模型给出 6 个点，且每个点置信度都 >= 阈值（页面标红用的同一阈值）。
+     这个数是压力状态的前提：点不齐就一定判不了状态，所以留着它便于解释
+     「为什么这批图状态未判定」。 */
+  const n6 = done.filter(i => {
+    const k = (i.res.pose && i.res.pose.kpts) || [];
+    return k.length >= KPT_N6
+        && k.every(x => x.conf != null && x.conf >= KPT_CONF_SHOW);
+  }).length;
+  /* 压力状态分布。未判定 = 后端没给出状态（点是齐的但置信度不足/边界次序乱，
+     或点本身就不齐），它是"没有结论"而不是第四种状态，所以单列一栏。 */
+  const np = s => done.filter(i => i.res.pressure === s).length;
+  $("#cTotal").textContent = items.length;
+  $("#cOk").textContent   = n("找到针尖");
+  $("#cBad").textContent  = n("未找到针尖");
+  $("#cMiss").textContent = n("未检出表盘");
+  $("#cKpt6").textContent = n6;
+  $("#cPUnder").textContent  = np("欠压");
+  $("#cPNormal").textContent = np("正常");
+  $("#cPOver").textContent   = np("超压");
+  $("#cPOut").textContent    = np("色带外");
+  $("#cPNone").textContent   = done.filter(i => !i.res.pressure).length;
+  const fin = items.filter(i => i.status === "done" || i.status === "error").length;
+  $("#progBar").style.width = items.length ? (fin / items.length * 100) + "%" : "0%";
+  const ms = done.map(i => i.res.elapsed_ms);
+  $("#avgMs").textContent = ms.length
+    ? `已完成 ${fin}/${items.length}　平均 ${Math.round(ms.reduce((a,b)=>a+b,0)/ms.length)}ms/张`
+    : "";
+  $("#progText").textContent = !items.length ? "等待选择图片…"
+    : running ? `识别中… ${fin}/${items.length}`
+    : `完成 ${fin}/${items.length}`;
+  $("#csv").disabled = $("#json").disabled = !done.length;
+}
+
+function syncButtons(){
+  $("#rerun").disabled = !items.length || running;
+  $("#clear").disabled = !items.length || running;
+}
+
+/* ---------------- 导出 ---------------- */
+function download(name, text, mime){
+  const blob = new Blob(["\ufeff", text], {type: mime});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+/* CSV 列口径 = 第二步的实际产物：压力状态 + 6 个关键点。
+   状态列把「判据本身」也带上（夹在哪两条射线之间 + 各自角度 + 余量），
+   只导一个「正常」是没法事后复核的。
+   针尖同时给「裁切图坐标」和「原图坐标」两套 —— 裁切图坐标对齐训练口径，
+   原图坐标直接可用在标注/测量里。
+   6 个点按 kpt0..kpt5 各出一组 (x, y, conf)，列名带点名列，换点数方案自动适配。
+   裁切方式 = circle | box；圆裁的宽高记成直径 2r（即圆的内接方框）。 */
+$("#csv").onclick = () => {
+  const done = items.filter(i => i.status === "done");
+  let kmax = 0;
+  done.forEach(i => {
+    const k = (i.res.pose && i.res.pose.kpts) || [];
+    if (k.length > kmax) kmax = k.length;
+  });
+  /* 点名列：优先用模型给的名字（后端从 kpt_names 来），缺了才退成 kptN */
+  const refKpts = (((done[0] || {}).res || {}).pose || {}).kpts || [];
+  const names = [];
+  for (let j = 0; j < kmax; j++)
+    names.push((refKpts[j] && refKpts[j].name) || ("kpt" + j));
+  const head = ["文件名","定位","压力状态",
+                "下边界","下边界角度","上边界","上边界角度",
+                "针尖角度","离最近边界(度)","未判定原因",
+                "针尖x","针尖y","针尖置信度","针尖原图x","针尖原图y",
+                ...names.flatMap((nm, j) => [`${j}_${nm}_x`, `${j}_${nm}_y`,
+                                             `${j}_${nm}_conf`]),
+                "模型关键点数",
+                /* 校正实况：模型吃的是校正后的正圆，这一列记录每张到底校没校成 ——
+                   结果异常时第一件事就是看它，而不是猜。 */
+                "正圆校正","校正轴比","校正圆半径px","校正耗时ms",
+                "裁切方式","裁切中心x","裁切中心y","裁切宽","裁切高",
+                "框置信度","耗时ms"];
+  const rows = done.map(i => {
+    const r = i.res, p = r.pose || {}, tp = p.tip || {}, ts = p.tip_src || {};
+    const c = r.circle || {}, k = r.crop_box || {};
+    const sp = p.state_span || {};
+    const ba = p.boundary_angles || [];
+    const rf = r.rectify || {};
+    const rmode = rf.applied
+      ? (rf.mode === "ellipse" ? "已校正(椭圆→圆)" : "正圆(仅居中)")
+      : (rf.enabled === false ? "未开启" : "失败降级");
+    const mode = r.circle ? "circle" : (r.crop_box ? "box" : "");
+    const g = r.circle
+      ? {cx: c.cx, cy: c.cy, w: c.r * 2, h: c.r * 2}
+      : {cx: k.cx, cy: k.cy, w: k.w, h: k.h};
+    const klist = p.kpts || [];
+    const kcells = [];
+    for (let j = 0; j < kmax; j++){
+      const kp = klist[j];
+      kcells.push(kp ? (kp.x ?? "") : "", kp ? (kp.y ?? "") : "",
+                  kp ? (kp.conf ?? "") : "");
+    }
+    return [r.name, r.status, r.pressure || "未判定",
+            sp.lo_name ?? "", sp.lo_deg ?? "", sp.hi_name ?? "", sp.hi_deg ?? "",
+            ba.length ? ba[ba.length - 1] : "",
+            p.state_margin_deg ?? "",
+            p.state ? "" : (p.state_reason || ""),
+            tp.x ?? "", tp.y ?? "", tp.conf ?? "",
+            ts.x ?? "", ts.y ?? "", ...kcells,
+            p.n_kpt ?? "",
+            rmode, rf.ratio ?? "", rf.r ?? "", rf.ms ?? "",
+            mode, g.cx ?? "", g.cy ?? "", g.w ?? "", g.h ?? "",
+            r.conf ?? "", r.elapsed_ms];
+  });
+  const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+  download("gauge_result.csv",
+    [head, ...rows].map(r => r.map(esc).join(",")).join("\r\n"),
+    "text/csv;charset=utf-8");
+};
+$("#json").onclick = () => {
+  const out = items.filter(i => i.status === "done")
+                   .map(i => Object.assign({}, i.res, {crop_jpeg: undefined}));
+  download("gauge_result.json", JSON.stringify(out, null, 2), "application/json");
+};
+
+/* ---------------- 弹窗 ---------------- */
+$("#results").addEventListener("click", e => {
+  const th = e.target.closest(".thumb");
+  if (!th) return;
+  const it = items.find(x => x.id === +th.closest(".item").dataset.id);
+  if (!it || !it.res) return;
+  openModal(it);
+});
+function openModal(it){
+  const r = it.res;
+  $("#mName").textContent = it.file.name;
+  $("#mBadge").className = "badge " + (STATUS_CLS[r.status] || "b-mute");
+  $("#mBadge").textContent = r.status;
+  const pst = r.pressure || "未判定";
+  $("#mPressure").className = "badge " + (PRESSURE_CLS[r.pressure] || "b-mute");
+  $("#mPressure").textContent = pst;
+  const im = $("#mImg");
+  im.src = it.url;
+  const cv = $("#mCanvas");
+  im.onload = () => paint(cv, im, r);
+  if (im.complete) paint(cv, im, r);
+  /* 第二栏的说明按这张图的实际情况写 —— 校正降级时不能还挂着「正圆校正后」 */
+  const rf2 = r.rectify || {};
+  $("#mCap2").textContent = rf2.applied
+    ? (rf2.mode === "ellipse"
+        ? `送入模型：正圆校正后（椭圆→圆 · 轴比 ${rf2.ratio}）`
+        : "送入模型：正圆（仅居中）")
+    : (rf2.enabled === false
+        ? "送入模型：检测框直裁（校正已关闭）"
+        : "送入模型：检测框直裁（校正失败已降级）");
+  $("#mCrop").src = r.crop_jpeg ? "data:image/jpeg;base64," + r.crop_jpeg : "";
+  $("#mCrop").style.display = r.crop_jpeg ? "block" : "none";
+  /* 第三栏：第二步的「识别出的关键点」图（后端 draw_pose_overlay 画好的
+     6 个点：0 圆心 / 1-4 色区边界 / 5 针尖） */
+  $("#mTip").src = r.pose_jpeg ? "data:image/jpeg;base64," + r.pose_jpeg : "";
+  $("#mTip").style.display = r.pose_jpeg ? "block" : "none";
+  const p = (r.pose) || {}, tp = p.tip || null, tps = p.tip_src || null;
+  /* 双模型时补一行「几何 X点 + 针尖 Y点 → 合并 6 点」，缺失的那个标出来 */
+  const splitTxt = (p.split === "tip+geom")
+    ? `双模型　几何 ${p.n_kpt_geom ?? "—"}点 + 针尖 ${p.n_kpt_tip ?? "—"}点<br>`
+    : "";
+  /* 压力状态那一块：和卡片里的小字同源，但这里是"值得停一下细看"的地方，
+     所以把夹住针尖的两条射线与各自角度都摊开写。 */
+  let pinfo = "";
+  if (r.pose){
+    const sp = p.state_span;
+    if (!p.state){
+      pinfo = `压力状态　<b>未判定</b><br>原因　${p.state_reason || "—"}`;
+    } else if (!sp){
+      pinfo = `压力状态　<b>${p.state}</b><br>针尖不在色带范围内（落在白盘面）`;
+    } else {
+      pinfo = `压力状态　<b>${p.state}</b><br>`
+            + `夹在　${sp.lo_name} ${sp.lo_deg}° → ${sp.hi_name} ${sp.hi_deg}°<br>`
+            + `离最近边界　${p.state_margin_deg ?? "—"}°`;
+    }
+  }
+  $("#mTipKv").innerHTML = !r.pose ? "（未回传关键点图）"
+    : (!tp ? `针尖　未检出<br>${p.reason || ""}<br>${splitTxt}关键点数　${p.n_kpt ?? "—"}<br>${pinfo}`
+           : `针尖(裁切图)　(${tp.x.toFixed(1)}, ${tp.y.toFixed(1)})<br>` +
+             `针尖(原图)　　(${tps ? tps.x.toFixed(1) : "—"}, ${tps ? tps.y.toFixed(1) : "—"})<br>` +
+             `置信度　${tp.conf ?? "—"}<br>${splitTxt}关键点数　${p.n_kpt ?? "—"}<br>${pinfo}`);
+  const c = r.circle || {}, k = r.crop_box || {};
+  /* ⚠ mCap1 / mCap2 在本函数的**开头**就已经按这张图的实况写过了
+     （读 r.rectify 那一段）。**不要在这里再写一遍** —— 之前这里留着两句旧文案，
+     把「已校正 / 已降级」的实况整个盖掉，截图上看到的是「送入第二步模型的裁切图」，
+     与实际不符。 */
+  const rf3 = r.rectify || {};
+  const rectTxt = !rf3.enabled ? "未开启"
+    : (rf3.applied
+        ? (rf3.mode === "ellipse"
+            ? `已校正 椭圆→圆　轴比 ${rf3.ratio}　r=${rf3.r}px`
+            : "正圆（本来就是正圆，仅居中）")
+        : "失败，已降级用直裁图");
+  $("#mKv").innerHTML =
+    `画幅　${r.width} × ${r.height}<br>` +
+    (r.bbox ? `框　　(${r.bbox.x1.toFixed(1)}, ${r.bbox.y1.toFixed(1)}) – ` +
+              `(${r.bbox.x2.toFixed(1)}, ${r.bbox.y2.toFixed(1)})　conf ${r.bbox.conf.toFixed(3)}<br>` : "") +
+    (r.circle ? `精化圆　(${c.cx}, ${c.cy})　r=${c.r}　${c.method}<br>` : "") +
+    (r.crop_box ? `裁切框　(${k.x1}, ${k.y1}) – (${k.x2}, ${k.y2})　` +
+                  `${k.w}×${k.h}　mode=${k.mode}<br>` : "") +
+    (r.crop_size ? `裁切　　${r.crop_size.join(" × ")}<br>` : "") +
+    `正圆校正　${rectTxt}` +
+    (rf3.ms != null ? `　${rf3.ms}ms` : "") +
+    (rf3.reason ? `<br>降级原因　${rf3.reason}` : "") + `<br>` +
+    `耗时　${r.elapsed_ms} ms`;
+  $("#modal").classList.add("on");
+}
+$("#mClose").onclick = () => $("#modal").classList.remove("on");
+$("#modal").onclick = e => { if (e.target.id === "modal") $("#modal").classList.remove("on"); };
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") $("#modal").classList.remove("on");
+});
+
+/* ---------------- toast ---------------- */
+let toastT = 0;
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove("on"), 3200);
+}
+
+checkHealth();
+render();
+</script>
+</body>
+</html>

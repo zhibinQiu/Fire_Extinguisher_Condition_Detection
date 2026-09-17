@@ -1,0 +1,16 @@
+# 灭火器压力表识别（test-device-ocr）—— 运行时依赖
+#
+# 流水线两步都是 YOLO：第一步 detect 检出表盘，第二步 pose 出 6 个关键点，
+# 所以真正需要的只有 ultralytics（它自带 torch/torchvision）+ opencv + numpy。
+# 本机现成环境: E:\Anaconda\envs\wanhua
+#   (ultralytics 8.4.142 / torch 2.14.0+cpu / opencv 5.0.0)，直接用即可。
+#
+# 换台机器时:
+#   python -m pip install -r requirements.txt
+#
+# 版本不必严格照抄：ultralytics>=8.1 即可，它会自动拉合适的 torch。
+torch>=2.4
+torchvision>=0.19
+ultralytics>=8.1
+opencv-python>=4.8
+numpy>=1.24
